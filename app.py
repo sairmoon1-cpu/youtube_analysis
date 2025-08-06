@@ -1,115 +1,70 @@
 import streamlit as st
 from googleapiclient.discovery import build
-import pandas as pd
-from collections import Counter
-from wordcloud import WordCloud
-import matplotlib.pyplot as plt
-from io import BytesIO
-import base64
-from konlpy.tag import Okt
-import plotly.express as px
-import urllib.request
-import os
+import re
 
-# --------------------------
-# 한글 폰트 웹에서 다운로드
-# --------------------------
-@st.cache_resource
-def download_font():
-    font_url = "https://github.com/naver/nanumfont/blob/master/ttf/NanumGothic.ttf?raw=true"
-    font_path = "/tmp/NanumGothic.ttf"
-    if not os.path.exists(font_path):
-        urllib.request.urlretrieve(font_url, font_path)
-    return font_path
+# ✅ 샘플용 URL & API Key (선택)
+SAMPLE_URL = "https://youtu.be/jX2jKPfN8ZY"
+SAMPLE_API_KEY = "AIzaSyCXFOmHGiXDJ2HvDpUC-d7QxdZ_EAxLov4"  # 제한적 공개 키
 
-FONT_PATH = download_font()
-
-# ------------------------
-# 유튜브 댓글 수집
-# ------------------------
-def get_video_id(url):
-    import re
-    match = re.search(r"(?:v=|youtu.be/)([a-zA-Z0-9_-]{11})", url)
+# 🔎 video ID 추출 함수
+def extract_video_id(url):
+    pattern = r"(?:v=|youtu\.be/)([\w-]+)"
+    match = re.search(pattern, url)
     return match.group(1) if match else None
 
-def get_comments(video_id, max_results=100):
-    api_key = st.secrets["youtube_api_key"]
-    youtube = build('youtube', 'v3', developerKey=api_key)
+# 💬 댓글 수집 함수
+def get_comments(video_id, api_key):
+    youtube = build("youtube", "v3", developerKey=api_key)
     comments = []
+    try:
+        response = youtube.commentThreads().list(
+            part="snippet",
+            videoId=video_id,
+            maxResults=100,
+            textFormat="plainText"
+        ).execute()
 
-    response = youtube.commentThreads().list(
-        part='snippet',
-        videoId=video_id,
-        maxResults=min(max_results, 100),
-        textFormat='plainText'
-    ).execute()
+        for item in response["items"]:
+            text = item["snippet"]["topLevelComment"]["snippet"]["textDisplay"]
+            comments.append(text)
 
-    for item in response['items']:
-        comment = item['snippet']['topLevelComment']['snippet']['textDisplay']
-        comments.append(comment)
+    except Exception as e:
+        st.error("❌ API 호출 중 오류가 발생했습니다.")
+        st.code(str(e))
 
     return comments
 
-# ------------------------
-# 워드클라우드 생성
-# ------------------------
-def generate_wordcloud(text_list, font_path):
-    text = ' '.join(text_list)
-    okt = Okt()
-    words = okt.nouns(text)
-    word_freq = Counter(words)
+# 🖥️ Streamlit 앱 UI
+st.title("🎯 YouTube 댓글 수집기")
 
-    wc = WordCloud(
-        font_path=font_path,
-        width=800,
-        height=400,
-        background_color='white'
-    ).generate_from_frequencies(word_freq)
+# 🔐 API 발급 방법 안내
+with st.expander("📘 YouTube API Key 발급 방법 안내"):
+    st.markdown("""
+    1. [Google Cloud Console](https://console.cloud.google.com/)에 접속합니다.
+    2. 새 프로젝트를 생성합니다.
+    3. `YouTube Data API v3`를 검색하고 **활성화**합니다.
+    4. 좌측 메뉴에서 **사용자 인증 정보** → `API 키 만들기`
+    5. 생성된 API 키를 아래 입력창에 붙여넣으세요.
+    """)
 
-    buf = BytesIO()
-    plt.figure(figsize=(10, 5))
-    plt.imshow(wc, interpolation='bilinear')
-    plt.axis("off")
-    plt.tight_layout()
-    plt.savefig(buf, format='png')
-    buf.seek(0)
-    encoded = base64.b64encode(buf.read()).decode()
-    return f"data:image/png;base64,{encoded}"
+# 📥 입력값
+youtube_url = st.text_input("📺 YouTube 영상 URL 입력", value=SAMPLE_URL)
+api_key = st.text_input("🔑 API 키 입력", type="password", value=SAMPLE_API_KEY)
 
-# ------------------------
-# Streamlit App 시작
-# ------------------------
-st.set_page_config(page_title="YouTube 댓글 키워드 분석기", layout="wide")
-st.title("💬 YouTube 댓글 키워드 분석기 (한글 지원)")
+# ▶️ 버튼
+if st.button("댓글 수집 시작"):
+    video_id = extract_video_id(youtube_url)
 
-url = st.text_input("🎥 분석할 유튜브 영상 URL을 입력하세요")
-
-if st.button("분석 시작") and url:
-    video_id = get_video_id(url)
     if not video_id:
-        st.error("유효한 유튜브 URL이 아닙니다.")
+        st.warning("⚠️ 유효한 YouTube URL을 입력해주세요.")
+        st.stop()
+
+    with st.spinner("🔄 댓글 수집 중..."):
+        comments = get_comments(video_id, api_key)
+
+    if comments:
+        st.success(f"✅ 댓글 {len(comments)}개가 수집되었습니다.")
+        for i, comment in enumerate(comments, 1):
+            st.write(f"💬 {i}. {comment}")
     else:
-        with st.spinner("댓글을 수집하고 분석 중입니다..."):
-            comments = get_comments(video_id)
-            if not comments:
-                st.warning("댓글이 없습니다.")
-            else:
-                st.success(f"{len(comments)}개의 댓글을 수집했습니다.")
-                df = pd.DataFrame({'댓글': comments})
-
-                # 단어 빈도 분석
-                all_text = ' '.join(df['댓글'])
-                okt = Okt()
-                nouns = okt.nouns(all_text)
-                word_freq = Counter(nouns)
-                top_words = word_freq.most_common(20)
-                word_df = pd.DataFrame(top_words, columns=['단어', '빈도'])
-
-                # 시각화
-                st.subheader("📊 단어 빈도 Top 20")
-                fig = px.bar(word_df, x='단어', y='빈도', title='단어 빈도 막대그래프')
-                st.plotly_chart(fig)
-
-                st.subheader("☁️ 워드클라우드")
-                img_uri = generate_wordcloud(df['댓글'].tolist(), FONT_PATH)
-                st.markdown(f'<img src="{img_uri}" width="100%">', unsafe_allow_html=True)
+        st.warning("😥 댓글이 존재하지 않거나 수집할 수 없습니다.")
