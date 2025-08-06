@@ -4,7 +4,7 @@ import re
 
 # ✅ 샘플용 URL & API Key (선택)
 SAMPLE_URL = "https://youtu.be/jX2jKPfN8ZY"
-SAMPLE_API_KEY = "AIzaSyCXFOmHGiXDJ2HvDpUC-d7QxdZ_EAxLov4"  # 제한적 공개 키
+SAMPLE_API_KEY = "AIzaSyBVmINQWW1wfHQ4LwXwcC6a9eAtHU6A_ro"  # 제한적 공개 키
 
 # 🔎 video ID 추출 함수
 def extract_video_id(url):
