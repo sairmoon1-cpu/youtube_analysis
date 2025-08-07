@@ -37,7 +37,8 @@ def get_comments(youtube_url, max_comments):
     """YouTube API를 사용하여 지정된 URL의 댓글을 수집합니다."""
     try:
         video_id = youtube_url.split("v=")[-1].split("&")[0]
-        api_key = st.secrets["google_api_key"]
+        # 사용자가 제공한 올바른 API 키 이름으로 수정
+        api_key = st.secrets["youtube_api_key"]
         youtube = build("youtube", "v3", developerKey=api_key)
         comments = []
 
@@ -115,7 +116,10 @@ st.set_page_config("YouTube 댓글 워드클라우드", "☁️", layout="wide")
 st.title("☁️ YouTube 댓글 워드클라우드 생성기")
 st.markdown("YouTube 영상의 댓글을 분석하여 핵심 단어를 보여주는 워드클라우드를 만들어보세요!")
 
-youtube_url = st.text_input("🎥 YouTube 영상 URL", placeholder="https://www.youtube.com/watch?v=...")
+# 사용자가 제공한 샘플 URL을 기본값으로 설정
+SAMPLE_URL = "https://www.youtube.com/watch?v=WXuK6gekU1Y"
+youtube_url = st.text_input("🎥 YouTube 영상 URL", value=SAMPLE_URL)
+
 col1, col2 = st.columns(2)
 with col1:
     max_comments = st.slider("💬 분석할 최대 댓글 수", min_value=100, max_value=2000, step=100, value=500)
