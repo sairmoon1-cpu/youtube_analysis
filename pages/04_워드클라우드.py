@@ -9,11 +9,10 @@ from collections import Counter
 from googleapiclient.discovery import build
 import re
 
-# 🔧 폰트 설정 함수 (URL 수정됨)
+# 🔧 폰트 설정 함수
 @st.cache_resource
 def get_font_path():
     """나눔고딕 폰트 파일을 다운로드하고 경로를 반환합니다."""
-    # GitHub 저장소 구조 변경으로 인해 URL을 업데이트했습니다.
     url = "https://raw.githubusercontent.com/google/fonts/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
     tmp_path = os.path.join(tempfile.gettempdir(), "NanumGothic.ttf")
     if not os.path.exists(tmp_path):
@@ -41,11 +40,17 @@ def get_video_data(youtube_url, max_comments):
         youtube = build("youtube", "v3", developerKey=api_key)
         
         # 영상 제목 가져오기
-        video_response = youtube.videos().list(
-            part='snippet',
-            id=video_id
-        ).execute()
-        video_title = video_response['items'][0]['snippet']['title']
+        video_title = ""
+        try:
+            video_response = youtube.videos().list(
+                part='snippet',
+                id=video_id
+            ).execute()
+            video_title = video_response['items'][0]['snippet']['title']
+        except Exception as e:
+            st.warning(f"영상 제목을 가져오는 데 실패했습니다: {e}")
+            video_title = "Untitled"
+
 
         # 댓글 가져오기
         comments = []
@@ -139,7 +144,7 @@ with col1:
 with col2:
     max_words = st.slider("🔠 워드클라우드에 표시할 단어 수", min_value=20, max_value=200, step=10, value=100)
 
-if st.button("� 워드클라우드 생성"):
+if st.button("🚀 워드클라우드 생성"):
     if not youtube_url:
         st.warning("YouTube 링크를 입력해주세요.")
     elif not FONT_PATH:
@@ -183,5 +188,3 @@ if st.button("� 워드클라우드 생성"):
                             file_name=file_name,
                             mime="image/png"
                         )
-
-�
