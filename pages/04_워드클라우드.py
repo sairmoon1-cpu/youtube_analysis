@@ -80,13 +80,14 @@ def clean_text(text):
     cleaned_text = re.sub(r"[^\uAC00-\uD7A3a-zA-Z0-9\s]", "", text)
     return cleaned_text.strip()
 
-def tokenize(texts):
-    """텍스트 리스트에서 2글자 이상의 한글/영어 단어만 추출하여 토큰화합니다."""
+def tokenize(texts, stopwords):
+    """텍스트 리스트에서 불용어를 제외하고 2글자 이상의 한글/영어 단어만 추출하여 토큰화합니다."""
     token_list = []
     for line in texts:
         # 2글자 이상의 한글 또는 영어 단어만 추출
-        tokens = re.findall(r"[a-zA-Z가-힣]{2,}", line)
-        token_list.extend(tokens)
+        tokens = re.findall(r"[a-zA-Z가-힣]{2,}", line.lower()) # 소문자로 변환하여 일관성 유지
+        filtered_tokens = [word for word in tokens if word not in stopwords]
+        token_list.extend(filtered_tokens)
     return token_list
 
 # 🌥️ 워드클라우드 생성 함수
@@ -120,6 +121,12 @@ st.markdown("YouTube 영상의 댓글을 분석하여 핵심 단어를 보여주
 SAMPLE_URL = "https://www.youtube.com/watch?v=WXuK6gekU1Y"
 youtube_url = st.text_input("🎥 YouTube 영상 URL", value=SAMPLE_URL)
 
+# 불용어 입력을 위한 UI 추가
+st.subheader("🚫 불용어 설정")
+default_stopwords = "ㅋㅋ,ㅎㅎ,ㅠㅠ,이,그,저,것,수,등,좀,잘,더,진짜,너무,완전,정말,근데,그래서,그리고,하지만,이제,영상,구독,좋아요,the,a,an,is,are,be,to,of,and,in,that,it,with,for,on,this,i,you,he,she,we,they,my,your,lol,omg,btw"
+user_stopwords = st.text_area("제외할 단어 (쉼표로 구분)", value=default_stopwords, height=100, help="분석에서 제외하고 싶은 단어를 쉼표(,)로 구분하여 입력하세요.")
+
+
 col1, col2 = st.columns(2)
 with col1:
     max_comments = st.slider("💬 분석할 최대 댓글 수", min_value=100, max_value=2000, step=100, value=500)
@@ -132,6 +139,9 @@ if st.button("🚀 워드클라우드 생성"):
     elif not FONT_PATH:
         st.error("폰트 파일을 불러올 수 없어 앱을 실행할 수 없습니다.")
     else:
+        # 사용자가 입력한 불용어를 리스트로 변환
+        stopword_list = [word.strip() for word in user_stopwords.lower().split(',') if word.strip()]
+        
         with st.spinner("YouTube 댓글을 수집하고 있습니다. 잠시만 기다려주세요..."):
             comments = get_comments(youtube_url, max_comments)
 
@@ -142,7 +152,7 @@ if st.button("🚀 워드클라우드 생성"):
 
             with st.spinner("텍스트를 전처리하고 단어를 분석 중입니다..."):
                 cleaned = [clean_text(c) for c in comments]
-                tokens = tokenize(cleaned)
+                tokens = tokenize(cleaned, stopword_list)
 
             if not tokens:
                 st.warning("분석할 수 있는 유효한 단어(2글자 이상 한글/영어)가 댓글에 충분하지 않습니다.")
