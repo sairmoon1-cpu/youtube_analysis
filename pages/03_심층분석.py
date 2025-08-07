@@ -1,11 +1,10 @@
 import streamlit as st
 from googleapiclient.discovery import build
 import pandas as pd
-from collections import Counter
 import altair as alt
 import re
 
-# ✅ 기본 설정
+# ✅ 샘플 URL & API Key
 SAMPLE_URL = "https://www.youtube.com/watch?v=WXuK6gekU1Y"
 API_KEY = st.secrets["youtube_api_key"]
 
@@ -92,26 +91,28 @@ if st.button("분석 시작"):
     df["작성 시각"] = pd.to_datetime(df["작성 시각"])
     df["시간대 (시)"] = df["작성 시각"].dt.hour
 
-    # --------------------- 📈 누적 댓글 수 (절대 시간 기준) ---------------------
+    # --------------------- 📈 누적 댓글 수 (작성 시각 기준) ---------------------
     st.subheader("📈 댓글 누적 수 (작성 시각 기준)")
 
     df_sorted = df.sort_values("작성 시각")
     df_sorted["누적 댓글 수"] = range(1, len(df_sorted) + 1)
 
-    # 최대 증가 구간 (1주일 내)
+    # 1주일 내 최대 증가 구간 계산 (예외처리 포함)
     week_df = df_sorted[df_sorted["작성 시각"] <= upload_time + pd.Timedelta(days=7)].copy()
     week_df["증가량"] = week_df["누적 댓글 수"].diff().fillna(0)
-    max_increase_time = week_df.loc[week_df["증가량"].idxmax(), "작성 시각"]
+
+    highlight = alt.Chart()  # 빈 차트 기본값
+    if not week_df.empty and week_df["증가량"].sum() > 0:
+        max_increase_time = week_df.loc[week_df["증가량"].idxmax(), "작성 시각"]
+        highlight = alt.Chart(pd.DataFrame({"작성 시각": [max_increase_time]})).mark_rule(
+            color='red', strokeDash=[4, 2]
+        ).encode(x='작성 시각:T')
 
     line_chart = alt.Chart(df_sorted).mark_line().encode(
         x=alt.X("작성 시각:T", title="댓글 작성 시각"),
         y=alt.Y("누적 댓글 수:Q"),
         tooltip=["작성 시각", "누적 댓글 수"]
     )
-
-    highlight = alt.Chart(pd.DataFrame({"작성 시각": [max_increase_time]})).mark_rule(
-        color='red', strokeDash=[4, 2]
-    ).encode(x='작성 시각:T')
 
     st.altair_chart(line_chart + highlight, use_container_width=True)
 
@@ -127,7 +128,7 @@ if st.button("분석 시작"):
     st.altair_chart(scatter, use_container_width=True)
 
     # ---------------- 🕒 시간대별 좋아요 수 ----------------
-    st.subheader("🕒 시간대별 좋아요 수")
+    st.subheader("🕒 시간대별 좋아요 수 (합계)")
 
     hourly_likes = df.groupby("시간대 (시)")["좋아요 수"].sum().reset_index()
 
@@ -139,14 +140,13 @@ if st.button("분석 시작"):
 
     st.altair_chart(bar, use_container_width=True)
 
-    # ➕ 박스 플롯 추가 (시간대별 좋아요 분포)
+    # ➕ 박스 플롯 추가 (시간대별 좋아요 수 분포)
     st.subheader("📦 시간대별 좋아요 수 분포 (Box Plot)")
 
-    st.altair_chart(
-        alt.Chart(df).mark_boxplot().encode(
-            x=alt.X("시간대 (시):O"),
-            y=alt.Y("좋아요 수:Q"),
-            tooltip=["시간대 (시)", "좋아요 수"]
-        ),
-        use_container_width=True
+    box = alt.Chart(df).mark_boxplot().encode(
+        x=alt.X("시간대 (시):O"),
+        y=alt.Y("좋아요 수:Q"),
+        tooltip=["시간대 (시)", "좋아요 수"]
     )
+
+    st.altair_chart(box, use_container_width=True)
