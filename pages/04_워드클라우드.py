@@ -121,11 +121,15 @@ st.markdown("YouTube 영상의 댓글을 분석하여 핵심 단어를 보여주
 SAMPLE_URL = "https://www.youtube.com/watch?v=WXuK6gekU1Y"
 youtube_url = st.text_input("🎥 YouTube 영상 URL", value=SAMPLE_URL)
 
-# 불용어 입력을 위한 UI 추가
-st.subheader("🚫 불용어 설정")
-default_stopwords = "ㅋㅋ,ㅎㅎ,ㅠㅠ,이,그,저,것,수,등,좀,잘,더,진짜,너무,완전,정말,근데,그래서,그리고,하지만,이제,영상,구독,좋아요,the,a,an,is,are,be,to,of,and,in,that,it,with,for,on,this,i,you,he,she,we,they,my,your,lol,omg,btw"
-user_stopwords = st.text_area("제외할 단어 (쉼표로 구분)", value=default_stopwords, height=100, help="분석에서 제외하고 싶은 단어를 쉼표(,)로 구분하여 입력하세요.")
-
+# st.expander를 사용하여 불용어 설정 부분을 토글 형태로 변경
+with st.expander("🚫 불용어 설정 (클릭하여 수정)"):
+    default_stopwords = "ㅋㅋ,ㅎㅎ,ㅠㅠ,이,그,저,것,수,등,좀,잘,더,진짜,너무,완전,정말,근데,그래서,그리고,하지만,이제,영상,구독,좋아요,the,a,an,is,are,be,to,of,and,in,that,it,with,for,on,this,i,you,he,she,we,they,my,your,lol,omg,btw"
+    user_stopwords = st.text_area(
+        "제외할 단어 (쉼표로 구분)",
+        value=default_stopwords,
+        height=100,
+        help="분석에서 제외하고 싶은 단어를 쉼표(,)로 구분하여 입력하세요."
+    )
 
 col1, col2 = st.columns(2)
 with col1:
@@ -159,4 +163,5 @@ if st.button("🚀 워드클라우드 생성"):
             else:
                 st.info(f"분석된 유효 단어 수: {len(tokens)}개")
                 with st.spinner("☁️ 워드클라우드를 생성하고 있습니다..."):
-                    generate_wordcloud(tokens, dpi=200, max_words=max_words)
+                    generate_wordcloud(tokens, dpi=300, max_words=max_words)
+ㄹ
