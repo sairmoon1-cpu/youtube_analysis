@@ -6,10 +6,18 @@ from soynlp.tokenizer import RegexTokenizer
 import re
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
+import os
+import urllib.request
 
 # ✅ 기본 세팅
 SAMPLE_URL = "https://www.youtube.com/watch?v=WXuK6gekU1Y"
 API_KEY = st.secrets["youtube_api_key"]  # 🔑 비공개 처리 필수
+
+# ✅ 한글 폰트 다운로드 및 경로 설정 (Streamlit Cloud 호환)
+FONT_URL = "https://github.com/naver/nanumfont/blob/master/TTF/NanumGothic.ttf?raw=true"
+FONT_PATH = "/tmp/NanumGothic.ttf"
+if not os.path.exists(FONT_PATH):
+    urllib.request.urlretrieve(FONT_URL, FONT_PATH)
 
 # 🎯 YouTube 영상 ID 추출
 def extract_video_id(url):
@@ -121,7 +129,7 @@ if st.button("🌈 워드클라우드 생성"):
             background_color="white",
             width=800,
             height=400,
-            font_path="NanumGothic.ttf"
+            font_path=FONT_PATH  # ✅ 다운로드된 폰트 사용
         ).generate_from_frequencies(filtered_freq)
 
         fig, ax = plt.subplots(figsize=(10, 5), dpi=200)
