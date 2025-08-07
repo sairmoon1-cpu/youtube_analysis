@@ -1,88 +1,42 @@
 import streamlit as st
-from googleapiclient.discovery import build
-import re
 
-# 샘플 값
-SAMPLE_URL = "https://www.youtube.com/watch?v=WXuK6gekU1Y"
-SAMPLE_API_KEY = "AIzaSyBVmINQWW1wfHQ4LwXwcC6a9eAtHU6A_ro"
+st.set_page_config(
+    page_title="🎬 유튜브 댓글 분석 프로젝트",
+    layout="wide",
+    page_icon="📊"
+)
 
-# ---------- 유틸 함수 ----------
+# ─────────────────────────────────────────────
+st.markdown("""
+# 🎬 YouTube 댓글 분석 프로젝트 📊  
+**누구나 쉽게 따라할 수 있는 실용형 데이터 리터러시 실습**  
+(by **석리송**)
 
-def extract_video_id(url):
-    pattern = r"(?:v=|youtu\.be/)([\w-]+)"
-    match = re.search(pattern, url)
-    return match.group(1) if match else None
+---
 
-def get_comments(video_id, api_key, max_comments=100):
-    youtube = build("youtube", "v3", developerKey=api_key)
-    comments = []
-    next_page_token = None
+### 📚 프로젝트 소개
 
-    while True:
-        response = youtube.commentThreads().list(
-            part="snippet",
-            videoId=video_id,
-            maxResults=100,
-            pageToken=next_page_token,
-            order="relevance",
-            textFormat="plainText"
-        ).execute()
+이 웹앱은 유튜브 영상의 댓글을 수집하여 다양한 방식으로 분석할 수 있는 실습용 프로젝트입니다.  
+데이터 분석과 시각화를 통해 유튜브 콘텐츠에 대한 사용자 반응을 살펴볼 수 있어요.
 
-        for item in response["items"]:
-            snippet = item["snippet"]["topLevelComment"]["snippet"]
-            comments.append(snippet["textDisplay"])
+- 유튜브 영상 링크만 입력하면 댓글 수집 가능
+- 시간대별 댓글 추이, 좋아요 수 분석
+- 자주 등장하는 단어 시각화(워드클라우드) 제공
+- Streamlit Cloud에서 쉽게 실행 가능
 
-        next_page_token = response.get("nextPageToken")
-        if not next_page_token or (max_comments != -1 and len(comments) >= max_comments):
-            break
+---
 
-    return comments[:max_comments] if max_comments != -1 else comments
+### 🔑 YouTube API Key 발급 방법
 
-# ---------- UI ----------
+1. [https://console.cloud.google.com/](https://console.cloud.google.com/) 접속 후 로그인  
+2. 새로운 프로젝트 생성 (예: `youtube-analysis`)
+3. 좌측 메뉴 → **API 및 서비스 > 라이브러리**로 이동  
+4. **YouTube Data API v3** 검색 후 클릭 → "사용" 클릭  
+5. 다시 좌측 메뉴 → **사용자 인증 정보 > 사용자 인증 정보 만들기 > API 키** 클릭  
+6. 생성된 API 키를 복사하여 `.streamlit/secrets.toml`에 다음과 같이 저장합니다:
 
-st.title("🎯 YouTube 댓글 수집기 (v2)")
-
-with st.expander("📘 YouTube API Key 발급 방법 안내"):
-    st.markdown("""
-    1. [Google Cloud Console](https://console.cloud.google.com/)에 접속
-    2. 새 프로젝트 생성
-    3. `YouTube Data API v3`를 활성화
-    4. '사용자 인증 정보' → `API 키 만들기`
-    5. 생성된 API 키를 복사하여 아래에 붙여넣으세요.
-    """)
-
-# 입력
-youtube_url = st.text_input("📺 YouTube 영상 URL 입력", value=SAMPLE_URL)
-api_key = st.text_input("🔑 API 키 입력", type="password", value=SAMPLE_API_KEY)
-
-# 댓글 수 설정 (Selectbox + Slider 병행)
-st.markdown("### 💬 댓글 수집 개수 선택")
-col1, col2 = st.columns(2)
-
-with col1:
-    select_count = st.selectbox("빠른 선택", ["100", "500", "1000", "모두"], index=0)
-
-with col2:
-    slider_count = st.slider("세부 조절", 100, 1000, step=100, value=100)
-
-# 선택 결과 반영
-if select_count == "모두":
-    comment_limit = -1  # -1이면 모두
-else:
-    comment_limit = max(int(select_count), slider_count)
-
-if st.button("댓글 수집 시작"):
-    video_id = extract_video_id(youtube_url)
-    if not video_id:
-        st.warning("⚠️ 유효한 YouTube URL을 입력해주세요.")
-        st.stop()
-
-    with st.spinner("🔄 댓글 수집 중..."):
-        comments = get_comments(video_id, api_key, comment_limit)
-
-    if comments:
-        st.success(f"✅ 댓글 {len(comments)}개 수집 완료!")
-        for i, comment in enumerate(comments, 1):
-            st.write(f"💬 {i}. {comment}")
-    else:
-        st.warning("😥 댓글을 수집할 수 없습니다.")
+```toml
+[youtube]
+youtube_api_key = "여기에_발급받은_API_키_붙여넣기"
+⚠️ 외부 공유 시 API 키는 노출되지 않도록 주의해주세요.
+'''
