@@ -14,7 +14,7 @@ SAMPLE_URL = "https://www.youtube.com/watch?v=WXuK6gekU1Y"
 API_KEY = st.secrets["youtube_api_key"]  # 🔑 비공개 처리 필수
 
 # ✅ 한글 폰트 다운로드 및 경로 설정 (Streamlit Cloud 호환)
-FONT_URL = "https://github.com/naver/nanumfont/blob/master/TTF/NanumGothic.ttf?raw=true"
+FONT_URL = "https://raw.githubusercontent.com/naver/nanumfont/master/TTF/NanumGothic.ttf"
 FONT_PATH = "/tmp/NanumGothic.ttf"
 if not os.path.exists(FONT_PATH):
     urllib.request.urlretrieve(FONT_URL, FONT_PATH)
