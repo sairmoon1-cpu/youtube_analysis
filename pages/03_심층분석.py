@@ -101,20 +101,24 @@ if st.button("분석 시작"):
     week_df = df_sorted[df_sorted["작성 시각"] <= upload_time + pd.Timedelta(days=7)].copy()
     week_df["증가량"] = week_df["누적 댓글 수"].diff().fillna(0)
 
-    highlight = alt.Chart()  # 빈 차트 기본값
-    if not week_df.empty and week_df["증가량"].sum() > 0:
-        max_increase_time = week_df.loc[week_df["증가량"].idxmax(), "작성 시각"]
-        highlight = alt.Chart(pd.DataFrame({"작성 시각": [max_increase_time]})).mark_rule(
-            color='red', strokeDash=[4, 2]
-        ).encode(x='작성 시각:T')
+   highlight = None
+if not week_df.empty and week_df["증가량"].sum() > 0:
+    max_increase_time = week_df.loc[week_df["증가량"].idxmax(), "작성 시각"]
+    highlight = alt.Chart(pd.DataFrame({"작성 시각": [max_increase_time]})).mark_rule(
+        color='red', strokeDash=[4, 2]
+    ).encode(x='작성 시각:T')
 
-    line_chart = alt.Chart(df_sorted).mark_line().encode(
-        x=alt.X("작성 시각:T", title="댓글 작성 시각"),
-        y=alt.Y("누적 댓글 수:Q"),
-        tooltip=["작성 시각", "누적 댓글 수"]
-    )
+line_chart = alt.Chart(df_sorted).mark_line().encode(
+    x=alt.X("작성 시각:T", title="댓글 작성 시각"),
+    y=alt.Y("누적 댓글 수:Q"),
+    tooltip=["작성 시각", "누적 댓글 수"]
+)
 
+# 🔧 안전하게 결합
+if highlight:
     st.altair_chart(line_chart + highlight, use_container_width=True)
+else:
+    st.altair_chart(line_chart, use_container_width=True)
 
     # ------------------- ⏱ 댓글 시각 vs 좋아요 수 -------------------
     st.subheader("🧭 댓글 시각 vs 좋아요 수")
