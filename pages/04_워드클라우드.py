@@ -32,19 +32,25 @@ else:
     st.error("폰트를 불러올 수 없어 워드클라우드 생성이 불가능합니다.")
 
 
-# 📦 댓글 수집 함수
-def get_comments(youtube_url, max_comments):
-    """YouTube API를 사용하여 지정된 URL의 댓글을 수집합니다."""
+# 📦 댓글 및 영상 제목 수집 함수
+def get_video_data(youtube_url, max_comments):
+    """YouTube API를 사용하여 댓글과 영상 제목을 수집합니다."""
     try:
         video_id = youtube_url.split("v=")[-1].split("&")[0]
-        # 사용자가 제공한 올바른 API 키 이름으로 수정
         api_key = st.secrets["youtube_api_key"]
         youtube = build("youtube", "v3", developerKey=api_key)
-        comments = []
+        
+        # 영상 제목 가져오기
+        video_response = youtube.videos().list(
+            part='snippet',
+            id=video_id
+        ).execute()
+        video_title = video_response['items'][0]['snippet']['title']
 
+        # 댓글 가져오기
+        comments = []
         next_page_token = None
         while len(comments) < max_comments:
-            # maxResults는 최대 100이므로, 남은 댓글 수와 100 중 작은 값을 사용합니다.
             request_count = min(100, max_comments - len(comments))
             if request_count <= 0:
                 break
@@ -66,17 +72,16 @@ def get_comments(youtube_url, max_comments):
             if not next_page_token:
                 break
         
-        return comments
+        return comments, video_title
 
     except Exception as e:
-        st.error(f"댓글 수집 중 오류가 발생했습니다: {e}")
+        st.error(f"데이터 수집 중 오류가 발생했습니다: {e}")
         st.info("올바른 YouTube 영상 URL인지, API 키가 유효한지 확인해주세요.")
-        return []
+        return [], None
 
 # 🧼 텍스트 전처리
 def clean_text(text):
     """특수문자, 이모티콘 등을 제거하여 텍스트를 정제합니다."""
-    # 한글, 영어, 숫자, 공백만 남기고 모두 제거
     cleaned_text = re.sub(r"[^\uAC00-\uD7A3a-zA-Z0-9\s]", "", text)
     return cleaned_text.strip()
 
@@ -84,18 +89,17 @@ def tokenize(texts, stopwords):
     """텍스트 리스트에서 불용어를 제외하고 2글자 이상의 한글/영어 단어만 추출하여 토큰화합니다."""
     token_list = []
     for line in texts:
-        # 2글자 이상의 한글 또는 영어 단어만 추출
-        tokens = re.findall(r"[a-zA-Z가-힣]{2,}", line.lower()) # 소문자로 변환하여 일관성 유지
+        tokens = re.findall(r"[a-zA-Z가-힣]{2,}", line.lower())
         filtered_tokens = [word for word in tokens if word not in stopwords]
         token_list.extend(filtered_tokens)
     return token_list
 
 # 🌥️ 워드클라우드 생성 함수
-def generate_wordcloud(tokens, dpi=300, max_words=100):
-    """단어 토큰을 기반으로 워드클라우드를 생성하고 Streamlit에 표시합니다."""
+def generate_wordcloud(tokens, dpi=200, max_words=100):
+    """단어 토큰을 기반으로 워드클라우드 Figure 객체를 생성하여 반환합니다."""
     if not FONT_PATH:
         st.error("폰트 파일이 없어 워드클라우드를 생성할 수 없습니다.")
-        return
+        return None
 
     word_freq = Counter(tokens).most_common(max_words)
     
@@ -110,18 +114,16 @@ def generate_wordcloud(tokens, dpi=300, max_words=100):
     fig, ax = plt.subplots(figsize=(10, 7.5), dpi=dpi)
     ax.imshow(wc, interpolation="bilinear")
     ax.axis("off")
-    st.pyplot(fig)
+    return fig
 
 # ────────────────────── Streamlit UI ──────────────────────
 st.set_page_config("YouTube 댓글 워드클라우드", "☁️", layout="wide")
 st.title("☁️ YouTube 댓글 워드클라우드 생성기")
 st.markdown("YouTube 영상의 댓글을 분석하여 핵심 단어를 보여주는 워드클라우드를 만들어보세요!")
 
-# 사용자가 제공한 샘플 URL을 기본값으로 설정
 SAMPLE_URL = "https://www.youtube.com/watch?v=WXuK6gekU1Y"
 youtube_url = st.text_input("🎥 YouTube 영상 URL", value=SAMPLE_URL)
 
-# st.expander를 사용하여 불용어 설정 부분을 토글 형태로 변경
 with st.expander("🚫 불용어 설정 (클릭하여 수정)"):
     default_stopwords = "ㅋㅋ,ㅎㅎ,ㅠㅠ,이,그,저,것,수,등,좀,잘,더,진짜,너무,완전,정말,근데,그래서,그리고,하지만,이제,영상,구독,좋아요,the,a,an,is,are,be,to,of,and,in,that,it,with,for,on,this,i,you,he,she,we,they,my,your,lol,omg,btw"
     user_stopwords = st.text_area(
@@ -137,22 +139,21 @@ with col1:
 with col2:
     max_words = st.slider("🔠 워드클라우드에 표시할 단어 수", min_value=20, max_value=200, step=10, value=100)
 
-if st.button("🚀 워드클라우드 생성"):
+if st.button("� 워드클라우드 생성"):
     if not youtube_url:
         st.warning("YouTube 링크를 입력해주세요.")
     elif not FONT_PATH:
         st.error("폰트 파일을 불러올 수 없어 앱을 실행할 수 없습니다.")
     else:
-        # 사용자가 입력한 불용어를 리스트로 변환
         stopword_list = [word.strip() for word in user_stopwords.lower().split(',') if word.strip()]
         
-        with st.spinner("YouTube 댓글을 수집하고 있습니다. 잠시만 기다려주세요..."):
-            comments = get_comments(youtube_url, max_comments)
+        with st.spinner("YouTube 댓글과 영상 정보를 수집하고 있습니다..."):
+            comments, video_title = get_video_data(youtube_url, max_comments)
 
         if not comments:
             st.error("댓글을 가져오지 못했습니다. 영상 ID, 댓글 공개 여부 또는 API 키 설정을 확인해주세요.")
         else:
-            st.success(f"✅ {len(comments)}개의 댓글을 성공적으로 수집했습니다!")
+            st.success(f"✅ '{video_title}' 영상의 댓글 {len(comments)}개를 성공적으로 수집했습니다!")
 
             with st.spinner("텍스트를 전처리하고 단어를 분석 중입니다..."):
                 cleaned = [clean_text(c) for c in comments]
@@ -163,4 +164,24 @@ if st.button("🚀 워드클라우드 생성"):
             else:
                 st.info(f"분석된 유효 단어 수: {len(tokens)}개")
                 with st.spinner("☁️ 워드클라우드를 생성하고 있습니다..."):
-                    generate_wordcloud(tokens, dpi=300, max_words=max_words)
+                    wordcloud_fig = generate_wordcloud(tokens, dpi=200, max_words=max_words)
+                    
+                    if wordcloud_fig:
+                        st.pyplot(wordcloud_fig)
+                        
+                        # 이미지 다운로드 기능 추가
+                        buf = io.BytesIO()
+                        wordcloud_fig.savefig(buf, format="png", bbox_inches='tight')
+                        
+                        # 파일명으로 사용할 수 없는 문자 제거
+                        clean_title = re.sub(r'[\\/*?:"<>|]', "", video_title)
+                        file_name = f"{clean_title}_워드클라우드.png"
+                        
+                        st.download_button(
+                            label="🖼️ 이미지 다운로드",
+                            data=buf.getvalue(),
+                            file_name=file_name,
+                            mime="image/png"
+                        )
+
+�
