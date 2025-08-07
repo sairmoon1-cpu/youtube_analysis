@@ -2,27 +2,28 @@ import streamlit as st
 from googleapiclient.discovery import build
 import pandas as pd
 from collections import Counter
-from soynlp.tokenizer import RegexTokenizer
-import re
 import altair as alt
+import re
+from datetime import datetime, timedelta
 
 # ✅ 샘플
 SAMPLE_URL = "https://www.youtube.com/watch?v=WXuK6gekU1Y"
 API_KEY = st.secrets["youtube_api_key"]
 
-# 🔍 video ID 추출
+# 영상 ID 추출
 def extract_video_id(url):
     pattern = r"(?:v=|youtu\.be/)([\w-]+)"
     match = re.search(pattern, url)
     return match.group(1) if match else None
 
-# ✅ 영상 업로드 시각 수집
-def get_video_published_time(video_id, api_key):
+# 영상 업로드일 수집
+def get_video_upload_time(video_id, api_key):
     youtube = build("youtube", "v3", developerKey=api_key)
     response = youtube.videos().list(part="snippet", id=video_id).execute()
-    return response["items"][0]["snippet"]["publishedAt"]
+    upload_time = response["items"][0]["snippet"]["publishedAt"]
+    return pd.to_datetime(upload_time)
 
-# 💬 댓글 수집 (내용, 시간, 좋아요 수 포함)
+# 댓글 수집 (작성 시각 + 좋아요 포함)
 def get_comments(video_id, api_key, max_comments=100):
     youtube = build("youtube", "v3", developerKey=api_key)
     comments, timestamps, likes = [], [], []
@@ -50,90 +51,100 @@ def get_comments(video_id, api_key, max_comments=100):
 
     return (
         comments[:max_comments] if max_comments != -1 else comments,
-        timestamps[:max_comments] if max_comments != -1 else timestamps,
+        pd.to_datetime(timestamps[:max_comments] if max_comments != -1 else timestamps),
         likes[:max_comments] if max_comments != -1 else likes
     )
 
-# ----------------- Streamlit 앱 ------------------
+# ------------------- Streamlit 앱 -------------------
 
-st.title("📊 YouTube 댓글 시간 & 좋아요 수 분석기")
+st.title("⏰ YouTube 댓글 시간 분석기")
 
-youtube_url = st.text_input("📺 영상 URL", value=SAMPLE_URL)
-
+youtube_url = st.text_input("📺 YouTube 영상 URL", value=SAMPLE_URL)
 col1, col2 = st.columns(2)
 with col1:
-    select_count = st.selectbox("댓글 개수 (빠른 선택)", ["100", "500", "1000", "모두"], index=0)
+    select_count = st.selectbox("댓글 수 (빠른 선택)", ["100", "500", "1000", "모두"], index=0)
 with col2:
-    slider_count = st.slider("댓글 개수 (세부 조절)", 100, 1000, step=100, value=100)
+    slider_count = st.slider("댓글 수 (세부 조절)", 100, 1000, step=100, value=100)
 
-comment_limit = -1 if select_count == "모두" else max(int(select_count), slider_count)
+limit = -1 if select_count == "모두" else max(int(select_count), slider_count)
 
-if st.button("댓글 수집 및 분석 시작"):
+if st.button("분석 시작"):
     video_id = extract_video_id(youtube_url)
     if not video_id:
-        st.error("❌ 유효한 YouTube URL이 아닙니다.")
+        st.error("⚠️ 유효한 YouTube URL이 아닙니다.")
         st.stop()
 
-    with st.spinner("📅 영상 업로드 시각 확인 중..."):
-        video_published_at = get_video_published_time(video_id, API_KEY)
-        video_uploaded_time = pd.to_datetime(video_published_at)
+    with st.spinner("📥 영상 업로드일 조회 중..."):
+        upload_time = get_video_upload_time(video_id, API_KEY)
 
     with st.spinner("💬 댓글 수집 중..."):
-        comments, timestamps, likes = get_comments(video_id, API_KEY, comment_limit)
+        comments, timestamps, likes = get_comments(video_id, API_KEY, limit)
 
     if not comments:
-        st.warning("😥 댓글을 수집하지 못했습니다.")
+        st.warning("댓글을 수집할 수 없습니다.")
         st.stop()
 
+    # DataFrame 구성
     df = pd.DataFrame({
         "댓글 내용": comments,
-        "작성 시각": pd.to_datetime(timestamps),
+        "작성 시각": timestamps,
         "좋아요 수": likes
     })
+    df["경과 시간 (시)"] = ((df["작성 시각"] - upload_time).dt.total_seconds() // 3600).astype(int)
+    df["시간대 (시)"] = df["작성 시각"].dt.hour
 
-    # 업로드 기준 시간 경과 계산
-    df["경과 시간 (분)"] = (df["작성 시각"] - video_uploaded_time).dt.total_seconds() / 60
-    df["경과 시간 (시)"] = df["경과 시간 (분)"] / 60
-    df["작성 시간대 (시)"] = df["작성 시각"].dt.hour
+    # --------------------- 📈 1. 누적 댓글 수 그래프 ---------------------
+    st.subheader("📈 업로드 이후 댓글 누적 수")
 
-    st.success(f"✅ 댓글 {len(df)}개 수집 완료! 영상 업로드 시각: {video_uploaded_time}")
+    hourly_counts = df.groupby("경과 시간 (시)").size().reset_index(name="댓글 수")
+    hourly_counts["누적 댓글 수"] = hourly_counts["댓글 수"].cumsum()
 
-    # ---------------- 시각화 ----------------
+    # 1주일 이내 최대 증가구간 강조
+    within_week = hourly_counts[hourly_counts["경과 시간 (시)"] <= 168]
+    diffs = within_week["누적 댓글 수"].diff().fillna(0)
+    max_idx = diffs.idxmax()
+    highlight_hour = within_week.loc[max_idx, "경과 시간 (시)"]
 
-    st.subheader("📈 영상 업로드 이후 댓글 수 추이")
-
-    df_time = df.copy()
-    df_time["경과 시간 (시)"] = df_time["경과 시간 (시)"].round().astype(int)
-    hourly_count = df_time.groupby("경과 시간 (시)").size().reset_index(name="댓글 수")
-
-    chart1 = alt.Chart(hourly_count).mark_line(point=True).encode(
-        x=alt.X("경과 시간 (시):Q", title="업로드 이후 경과 시간 (시간 단위)"),
-        y=alt.Y("댓글 수:Q"),
-        tooltip=["경과 시간 (시)", "댓글 수"]
-    ).properties(
-        title="업로드 후 시간별 댓글 수 추이"
+    base_line = alt.Chart(hourly_counts).mark_line().encode(
+        x="경과 시간 (시):Q",
+        y="누적 댓글 수:Q",
+        tooltip=["경과 시간 (시)", "누적 댓글 수"]
     )
 
-    st.altair_chart(chart1, use_container_width=True)
+    highlight_point = alt.Chart(hourly_counts[hourly_counts["경과 시간 (시)"] == highlight_hour]).mark_point(
+        color="red", size=100
+    ).encode(
+        x="경과 시간 (시):Q",
+        y="누적 댓글 수:Q"
+    )
 
-    st.subheader("🟢 댓글 작성 시각 vs 좋아요 수")
+    st.altair_chart(base_line + highlight_point, use_container_width=True)
 
-    chart2 = alt.Chart(df).mark_circle(size=60).encode(
-        x=alt.X("작성 시각:T", title="댓글 작성 시간"),
-        y=alt.Y("좋아요 수:Q"),
-        tooltip=["댓글 내용", "좋아요 수", "작성 시각"]
-    ).interactive().properties(title="댓글 시간과 좋아요 수 관계")
+    # ------------------- ⏱ 2. 댓글 작성 시각 vs 좋아요 수 -------------------
+    st.subheader("🧭 댓글 작성 시각 vs 좋아요 수")
 
-    st.altair_chart(chart2, use_container_width=True)
+    st.altair_chart(
+        alt.Chart(df).mark_circle(size=60, opacity=0.6).encode(
+            x="작성 시각:T",
+            y="좋아요 수:Q",
+            tooltip=["댓글 내용", "좋아요 수", "작성 시각"]
+        ).interactive(),
+        use_container_width=True
+    )
 
-    st.subheader("🕒 댓글 시간대별 좋아요 수")
+    # ---------------- 🕰 3. 댓글 시간대별 좋아요 수 합계 ----------------
+    st.subheader("🕒 댓글 시간대별 좋아요 수 합계")
 
-    hourly_likes = df.groupby("작성 시간대 (시)")["좋아요 수"].sum().reset_index()
+    hourly_likes = df.groupby("시간대 (시)")["좋아요 수"].sum().reset_index()
 
-    chart3 = alt.Chart(hourly_likes).mark_bar().encode(
-        x=alt.X("작성 시간대 (시):O", title="댓글 작성 시간대 (24시간)"),
-        y=alt.Y("좋아요 수:Q"),
-        tooltip=["작성 시간대 (시)", "좋아요 수"]
-    ).properties(title="시간대별 좋아요 수 합계")
-
-    st.altair_chart(chart3, use_container_width=True)
+    st.altair_chart(
+        alt.Chart(hourly_likes).mark_bar().encode(
+            x=alt.X("시간대 (시):O", sort="ascending"),
+            y="좋아요 수:Q",
+            tooltip=["시간대 (시)", "좋아요 수"]
+        ).properties(
+            width=600,
+            height=400
+        ),
+        use_container_width=True
+    )
