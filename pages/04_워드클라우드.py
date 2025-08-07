@@ -91,7 +91,7 @@ def tokenize(texts, stopwords):
     return token_list
 
 # 🌥️ 워드클라우드 생성 함수
-def generate_wordcloud(tokens, dpi=200, max_words=100):
+def generate_wordcloud(tokens, dpi=300, max_words=100):
     """단어 토큰을 기반으로 워드클라우드를 생성하고 Streamlit에 표시합니다."""
     if not FONT_PATH:
         st.error("폰트 파일이 없어 워드클라우드를 생성할 수 없습니다.")
@@ -164,4 +164,3 @@ if st.button("🚀 워드클라우드 생성"):
                 st.info(f"분석된 유효 단어 수: {len(tokens)}개")
                 with st.spinner("☁️ 워드클라우드를 생성하고 있습니다..."):
                     generate_wordcloud(tokens, dpi=300, max_words=max_words)
-ㄹ
